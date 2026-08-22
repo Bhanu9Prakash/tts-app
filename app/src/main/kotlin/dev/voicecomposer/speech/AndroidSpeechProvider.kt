@@ -67,10 +67,18 @@ class AndroidSpeechProvider(
         )
 
     override suspend fun isAvailable(): Boolean = withContext(Dispatchers.Main) {
-        if (onDeviceGuaranteed) {
-            SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
-        } else {
-            SpeechRecognizer.isRecognitionAvailable(context)
+        when {
+            // isOnDeviceRecognitionAvailable only exists from API 33. Between
+            // 31 and 32 the on-device factory exists but there is no way to ask
+            // in advance, so we report available and let start() surface a
+            // failure - which is still honest, because that factory fails
+            // rather than silently using a network backend.
+            onDeviceGuaranteed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
+                SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+
+            onDeviceGuaranteed -> true
+
+            else -> SpeechRecognizer.isRecognitionAvailable(context)
         }
     }
 
@@ -115,8 +123,8 @@ class AndroidSpeechProvider(
         }
     }
 
-    override suspend fun stop() = withContext(Dispatchers.Main) {
-        recognizer?.stopListening()
+    override suspend fun stop() {
+        withContext(Dispatchers.Main) { recognizer?.stopListening() }
     }
 
     override suspend fun cancel() {
@@ -132,7 +140,7 @@ class AndroidSpeechProvider(
         recognizer = null
     }
 
-    private fun listener(onEvent: (TranscriptionEvent) -> Unit) = object : RecognitionListener {
+    private fun listener(emit: (TranscriptionEvent) -> Unit) = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) = Unit
         override fun onBeginningOfSpeech() = Unit
         override fun onRmsChanged(rmsdB: Float) = Unit
@@ -145,31 +153,31 @@ class AndroidSpeechProvider(
             val text = partialResults.firstResult() ?: return
             // Partials stay inside the app. They are shown in the scratchpad
             // only; nothing is sent to any other app at this stage.
-            onEvent(TranscriptionEvent.Partial(TranscriptionChunk(text, isFinal = false)))
+            emit(TranscriptionEvent.Partial(TranscriptionChunk(text, isFinal = false)))
         }
 
         override fun onResults(results: Bundle?) {
             if (cancelled) {
-                onEvent(TranscriptionEvent.Cancelled)
+                emit(TranscriptionEvent.Cancelled)
                 release()
                 return
             }
             val text = results.firstResult()
             if (text.isNullOrBlank()) {
-                onEvent(TranscriptionEvent.Failed(TranscriptionError.NoSpeechDetected))
+                emit(TranscriptionEvent.Failed(TranscriptionError.NoSpeechDetected))
             } else {
-                onEvent(TranscriptionEvent.Final(TranscriptionChunk(text, isFinal = true)))
+                emit(TranscriptionEvent.Final(TranscriptionChunk(text, isFinal = true)))
             }
             release()
         }
 
         override fun onError(error: Int) {
             if (cancelled) {
-                onEvent(TranscriptionEvent.Cancelled)
+                emit(TranscriptionEvent.Cancelled)
                 release()
                 return
             }
-            onEvent(TranscriptionEvent.Failed(error.toTranscriptionError()))
+            emit(TranscriptionEvent.Failed(error.toTranscriptionError()))
             release()
         }
     }

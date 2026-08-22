@@ -107,7 +107,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
-    implementation("androidx.lifecycle:lifecycle-service:2.8.6")
+    // viewModelScope, used by ComposerViewModel.
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.6")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")

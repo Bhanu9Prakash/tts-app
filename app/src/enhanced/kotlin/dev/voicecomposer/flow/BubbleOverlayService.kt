@@ -71,7 +71,6 @@ class BubbleOverlayService : Service() {
             return
         }
 
-        val settings = (application as VoiceComposerApp).settings
         val view = createBubbleView()
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -89,8 +88,8 @@ class BubbleOverlayService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = loadX(settings.hashCode())
-            y = loadY(settings.hashCode())
+            x = loadX()
+            y = loadY()
         }
 
         runCatching { windowManager.addView(view, params) }
@@ -173,10 +172,10 @@ class BubbleOverlayService : Service() {
             .putInt(KEY_X, x).putInt(KEY_Y, y).apply()
     }
 
-    private fun loadX(unused: Int): Int =
+    private fun loadX(): Int =
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_X, 0)
 
-    private fun loadY(unused: Int): Int =
+    private fun loadY(): Int =
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_Y, 400)
 
     private fun buildNotification(): Notification =
