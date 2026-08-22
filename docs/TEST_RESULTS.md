@@ -10,10 +10,11 @@ unable-to-verify. This document draws those lines rather than blurring them.
 
 | Category | Count |
 |---|---|
-| **Implemented and tested** (unit tests executed, all passing) | 133 tests across 5 modules |
-| **Implemented, compiles, not device-tested** | The entire Android layer |
-| **Not implemented** | Local ASR runtime, on-device LLM, BYOK transcription |
-| **Unable to verify** | Everything requiring a physical Android device |
+| **Tested on a JVM** (unit tests executed, all passing) | 153 tests across 5 modules |
+| **Tested on a real Android runtime** (emulator, API 34, in CI) | 14 instrumented tests |
+| **Implemented, compiles, not exercised** | Composer UI, speech recognition, Flow Mode, BYOK |
+| **Not implemented** | On-device LLM refinement, BYOK transcription, history |
+| **Unable to verify** | Accuracy, latency, battery - everything needing a real handset and a microphone |
 
 **No functional claim in this repository rests on a test that was not actually
 run.** Where something could not be tested, it says so.
@@ -22,7 +23,7 @@ run.** Where something could not be tested, it says so.
 
 ## 1. Implemented and tested
 
-133 unit tests, executed on JDK 21 locally and JDK 17 in CI. **All passing, zero
+153 unit tests, executed on JDK 21 locally and JDK 17 in CI. **All passing, zero
 failures, zero skipped.**
 
 Reproduce with `./gradlew test` — no Android SDK required.
@@ -30,10 +31,10 @@ Reproduce with `./gradlew test` — no Android SDK required.
 | Module | Tests | What is covered |
 |---|---|---|
 | `commands` | 23 | Command parsing, false-activation resistance, confidence tiers, confirmation gate |
-| `core` | 21 | Scratchpad undo/redo/history bounds, `ProcessingLocation` honesty rules |
+| `core` | 27 | Scratchpad undo/redo/history bounds, `ProcessingLocation` honesty rules, clipboard clear policy |
 | `refinement-local` | 39 | Deterministic transforms, command routing, meaning-preservation checks |
 | `security` | 35 | Sensitive field policy, sensitive app policy, redaction and log safety |
-| `model-manager` | 15 | SHA-256 verification, download guard, catalogue consistency |
+| `model-manager` | 29 | SHA-256 verification, download guard, catalogue consistency, archive extraction |
 
 ### The tests that matter most
 
@@ -67,9 +68,17 @@ exactly `hint_matches_otp_pattern`, with the phone number absent.
 not the message.
 
 **Every shipped model refuses to download.** `ModelDownloadGuardTest` asserts
-every catalogue entry fails the guard with `checksum_not_pinned`, and — as a
-regression guard — that no entry carries a well-formed hash, which would fail
-the build if someone pasted a plausible-looking one in without verifying it.
+every unpinned catalogue entry fails the guard with `checksum_not_pinned`,
+before any network request is made — and a companion test asserts every
+checksum is either the `UNPINNED` sentinel or 64 lowercase hex characters, so a
+truncated or malformed hash pasted in later fails the build rather than only
+surfacing as a failed download on someone's phone.
+
+**A model archive cannot escape its directory or smuggle in native code.**
+`ModelInstallerTest` covers zip slip (`../escaped.txt`, deep traversal, absolute
+entry names), refuses `.so`/`.dex`/`.apk`/`.jar`/`.sh`/`.dll` entries outright,
+bounds total size and entry count against a zip bomb, and asserts a failed
+extract leaves no partial install behind.
 
 ### Two real bugs these tests caught
 
@@ -91,14 +100,13 @@ something.
 
 ---
 
-## 2. Implemented, compiles, not device-tested
+## 2. Implemented, compiles, not exercised
 
 The Android layer compiles and both flavours package into installable APKs in
-CI. **None of it has been run on a device or emulator** — the environment that
-produced this source tree had neither.
+CI. Part of it is now covered by emulator tests (section 2b); everything in
+*this* table is not.
 
-Everything in this table should be read as "written, type-checked, and reviewed;
-behaviour unverified."
+Read each row as "written, type-checked, and reviewed; behaviour unverified."
 
 | Component | Status | What device testing would need to establish |
 |---|---|---|
@@ -106,8 +114,10 @@ behaviour unverified."
 | Composer UI (Compose) | Compiles | Rendering, rotation, process death and recreation, IME interaction |
 | `ProcessTextActivity` | Compiles | Whether the selection menu item appears in WhatsApp, Gmail, Docs, Chrome; whether replacement text is actually applied |
 | Quick Settings tile | Compiles | Tile placement, `startActivityAndCollapse` on API 34+ |
-| `ClipboardWriter` | Compiles | Auto-clear timing; whether `EXTRA_IS_SENSITIVE` suppresses previews as expected |
-| `CredentialStore` | Compiles | Keystore behaviour; whether hardware backing is reported correctly; key deletion |
+| `ClipboardWriter` | **Partly emulator-tested** | Auto-clear *timing* on a real clock; whether `EXTRA_IS_SENSITIVE` actually suppresses previews in the system UI |
+| `CredentialStore` | **Emulator-tested** | Remaining gap: whether hardware backing is genuinely reported on real hardware. An emulator has no TEE, so `isHardwareBacked()` is unverified |
+| `VoskTranscriptionProvider` | Compiles | Everything about recognition: it needs a microphone and a downloaded model, so accuracy, latency, partial-result cadence and long-dictation stability are all untested |
+| `ModelRepository` download path | **Partly emulator-tested** | The guard and install paths are covered; the actual network download is not, because every model is still UNPINNED |
 | `OpenAiRefinementProvider` | Compiles | **Never called against the live API** — the build environment had no network route to OpenAI. Request shape, model id validity and error handling are unverified |
 | `FlowAccessibilityService` | Compiles | Whether focus events fire as expected across apps; whether `ACTION_SET_TEXT` inserts correctly; whether password detection holds on real login screens |
 | `BubbleOverlayService` | Compiles | Overlay positioning, drag, rotation, keyboard show/hide, foreground/background transitions |
@@ -116,9 +126,7 @@ behaviour unverified."
 
 **All four APKs build.** `assembleSafeDebug`, `assembleEnhancedDebug`,
 `assembleSafeRelease` and `assembleEnhancedRelease` all complete, including R8
-minification and resource shrinking on the release variants. So the Android
-layer is known to compile, link, and package — including the enhanced flavour's
-accessibility service and overlay.
+minification and resource shrinking on the release variants.
 
 Two further claims are mechanically verified on every build, because CI
 inspects the packaged artifact rather than trusting the source:
@@ -127,11 +135,48 @@ inspects the packaged artifact rather than trusting the source:
 - The safe APK declares no accessibility service.
 
 Both are asserted with `aapt2` against the built APK, and the build fails if
-either regresses. Every APK's SHA-256, size and full permission list is printed
-to the job summary of each run.
+either regresses.
 
-What this does **not** establish is that any of it behaves correctly at
-runtime. Compiling and packaging is a much weaker claim than working.
+---
+
+## 2b. Tested on a real Android runtime
+
+14 instrumented tests run on an **API 34 emulator in CI** on every push
+(`connectedSafeDebugAndroidTest`). These check what a JVM cannot.
+
+**The Android Keystore** (`CredentialStoreInstrumentedTest`). The crypto path
+has no JVM equivalent, and a mistake in it would be silent. Verified on device:
+a credential round-trips; the plaintext is **not** present in the backing
+preferences file; **each encryption uses a fresh IV** (a reused IV with AES-GCM
+is a catastrophic failure that no unit test could catch); and destroying the key
+really does make surviving ciphertext undecryptable.
+
+**Model storage** (`ModelStorageInstrumentedTest`). Models land under
+`filesDir`, not external storage; install and delete round-trip; the zip-slip
+and native-code defences hold against Android's filesystem rather than a desktop
+JVM's; and the download guard actually stops an unpinned download rather than
+merely intending to.
+
+**Clipboard** (`ClipboardInstrumentedTest`). Reduced, deliberately - see below.
+It verifies the real `ClipboardManager` accepts the clip we build, including the
+API-33 sensitivity flag on the description, without throwing.
+
+### What the emulator could not verify, and what was done about it
+
+Clipboard *contents* cannot be asserted on a headless CI emulator. From
+Android 10 the OS refuses clipboard reads to apps without window focus, and a
+headless emulator never grants it. Three approaches were tried and all returned
+null: a plain instrumentation context, an `ActivityScenario`, and granting the
+`READ_CLIPBOARD` app-op.
+
+Rather than weaken the assertion, the rule that actually matters - *never clear
+a clipboard that now holds someone else's data* - was extracted into
+`ClipboardClearPolicy`, a pure function in `core` with full unit coverage
+**including the null-read case the device could not reach**. The Android class
+keeps only the mechanical parts.
+
+That is the pattern this project uses whenever a device gets in the way: move
+the decision somewhere it can be tested, rather than assert less.
 
 ---
 
@@ -141,12 +186,12 @@ Stated plainly rather than left to be discovered:
 
 | Feature | Status | Why |
 |---|---|---|
-| Local ASR (whisper.cpp / sherpa-onnx) | **Not implemented** | The inference runtime is not bundled. The catalogue, checksum verifier and download guard are implemented and tested; the engine that would consume a model is not. Selecting "Local model" falls back to the platform recogniser rather than presenting a dead option. |
+| Local ASR | **Implemented** | Vosk (`com.alphacephei:vosk-android`), a streaming on-device recogniser with prebuilt native libraries on Maven Central. `VoskTranscriptionProvider` and the full download/verify/install path are written and compile; recognition itself needs a microphone and has not been exercised. |
 | Gemini Nano / ML Kit GenAI refinement | **Not implemented** | Dependency not added; `ProviderRegistry` returns null for that option. |
 | Bundled local LLM | **Not implemented** | Deliberate — see `MODEL_COMPARISON.md`. |
 | BYOK transcription (OpenAI audio) | **Not implemented** | Only BYOK *refinement* is implemented. |
 | Dictation history persistence | **Not implemented** | The setting exists and defaults off; no storage layer is written. Nothing is persisted, which is the safe direction for an unimplemented feature. |
-| Instrumented (device) tests | **Not written** | Would require a device or emulator to be meaningful. |
+| Local LLM refinement | **Not implemented** | Gemini Nano / ML Kit GenAI is not wired in. |
 
 ---
 

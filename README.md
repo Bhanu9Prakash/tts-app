@@ -48,24 +48,25 @@ refinement, and optional bring-your-own-key cloud.
 
 Read this next to `docs/TEST_RESULTS.md`, which draws the line precisely.
 
-**Tested — 133 unit tests, all passing:**
+**Tested on a JVM — 153 unit tests, all passing:**
 the command parser and its false-activation resistance, the confirmation gate,
 the scratchpad and its undo/redo, every deterministic transform, the
-sensitive-field and sensitive-app policies, log redaction, and model checksum
-verification.
+sensitive-field and sensitive-app policies, log redaction, clipboard clear
+policy, model checksum verification, and archive extraction including zip-slip
+and native-code defences.
 
-**Compiles and packages, but has not run on a device:**
-the entire Android layer — the Compose UI, the platform speech provider, the
-Quick Settings tile, clipboard handling, Keystore credential storage, the
-`ACTION_PROCESS_TEXT` integration, and Flow Mode's bubble and accessibility
-service.
+**Tested on a real Android runtime — 14 instrumented tests on an API 34
+emulator, run in CI on every push:** the Android Keystore (round trip, no
+plaintext on disk, a fresh IV per encryption, key destruction), app-private
+model storage and its install/delete lifecycle, and that the download guard
+genuinely refuses an unpinned model.
 
-**Not implemented:** the local ASR runtime (whisper.cpp / sherpa-onnx),
-on-device LLM refinement, BYOK transcription, and history persistence. See
-`docs/LIMITATIONS.md`.
+**Compiles and packages, but not exercised:** the Compose UI, speech
+recognition itself (it needs a microphone), Flow Mode's bubble and accessibility
+service, and the BYOK provider (never called against the live API).
 
-There is no device in the environment that produced this repository, so nothing
-here claims device-verified behaviour.
+**Not implemented:** on-device LLM refinement, BYOK transcription, and history
+persistence. See `docs/LIMITATIONS.md`.
 
 ---
 
@@ -119,6 +120,29 @@ because Android's default speech recogniser may run locally or in the cloud and
 an app cannot tell which. Voice Composer will not call that "offline".
 
 `docs/PRIVACY.md` has the detail.
+
+---
+
+## Fully local speech
+
+Voice Composer bundles [Vosk](https://alphacephei.com/vosk/) — a streaming
+on-device recogniser, Apache-2.0, with prebuilt native libraries. Download a
+model once and dictation works with **no network at all**, including on
+aeroplane mode.
+
+Models offered: small English (US), small and large **Indian English**, and
+**Hindi**. The Model Manager states each one's download size before you tap,
+and lets you delete it afterwards.
+
+Two things about model downloads worth knowing:
+
+- **Nothing downloads without an explicit tap.** There is no setting that can
+  pre-approve it.
+- **Every archive is SHA-256 verified before it is unpacked**, and unpacking
+  refuses path traversal, native libraries and zip bombs. Models whose checksum
+  is not pinned are not downloadable *at all* — which, in this build, is all of
+  them. See `docs/MODEL_COMPARISON.md` for why that is deliberate and how to
+  pin them.
 
 ---
 

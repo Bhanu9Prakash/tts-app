@@ -188,12 +188,12 @@ see `TEST_RESULTS.md`, which does not blur this line.
 | Reuse ChatGPT for text refinement | **No** | No documented result contract | n/a | Yes — by platform analysis |
 | Android on-device transcription | **Yes** | `SpeechRecognizer.createOnDeviceSpeechRecognizer` (API 31+) | Runs locally; API fails rather than falling back to cloud | Implemented, **not device-tested** |
 | Android default transcription | **Yes** | `SpeechRecognizer` | **Location unverifiable** — reported as UNKNOWN, never as "offline" | Implemented, **not device-tested** |
-| Local ASR (Whisper / sherpa-onnx) | **Not in this build** | Runtime not bundled | Would be fully local | **Not implemented** — see `LIMITATIONS.md` |
+| Local ASR | **Yes** | Vosk (`com.alphacephei:vosk-android`), streaming, on-device | Fully local; the only provider that reports ON_DEVICE unconditionally | Implemented and compiles; **recognition not exercised** (needs a microphone) |
 | Gemini Nano / on-device OS refinement | **Not in this build** | ML Kit GenAI would be the route | Would be local, device-dependent | **Not implemented** |
 | Downloadable local LLM | **Not in this build** | — | — | **Not implemented** |
 | OpenAI BYOK transcription | **Not in this build** | — | Audio would leave device | **Not implemented** |
 | OpenAI BYOK refinement | **Yes** | `chat/completions` with the user's key | Draft leaves device; clearly labelled | Implemented, **not tested against live API** |
-| Explicit clipboard output | **Yes** | `ClipboardManager` + auto-clear | Safest output path | Implemented, **not device-tested** |
+| Explicit clipboard output | **Yes** | `ClipboardManager` + auto-clear | Safest output path | Implemented; clear policy **unit-tested**, write path **emulator-tested** |
 | Direct insertion without Accessibility | **Yes, partially** | `ACTION_PROCESS_TEXT` (§2.3) | No extra permission | Implemented, **not device-tested**; works only for selected text |
 | Flow-like bubble | **Yes** | `TYPE_APPLICATION_OVERLAY` | Needs overlay permission; enhanced flavour only | Implemented, **not device-tested** |
 | Automatic text-field detection | **Yes** | AccessibilityService focus events | Needs accessibility permission; enhanced flavour only | Implemented, **not device-tested** |
@@ -213,9 +213,10 @@ measurements taken by this project** — see `MODEL_COMPARISON.md`.
 | Existing ChatGPT subscription | n/a | n/a | n/a | n/a | n/a | n/a | n/a — **not available** |
 | Android on-device speech | None | Yes | No | No | Device-dependent | Low | 0 (OS language packs) |
 | Android default speech | None | **Unverifiable** | **Unverifiable** | No | Generally good | Low | 0 |
-| Local ASR Fast (Whisper tiny.en) | None | Yes | No | No | Lower | Low | ~32 MB |
-| Local ASR Balanced (Whisper base.en) | None | Yes | No | No | Good for English | Medium | ~60 MB |
-| Local ASR High Quality (Whisper small) | None | Yes | No | No | Best local; multilingual | Higher | ~190 MB |
+| Local ASR Fast (Vosk small en-US) | None | **Yes** | No | No | Good | Streaming, faster than real time | ~40 MB |
+| Local ASR Fast (Vosk small en-IN) | None | **Yes** | No | No | Tuned for Indian English | Streaming | ~36 MB |
+| Local ASR High Quality (Vosk en-IN) | None | **Yes** | No | No | Best local for Indian English | Streaming | ~1 GB |
+| Local ASR (Vosk small Hindi) | None | **Yes** | No | No | Hindi only, no code-switching | Streaming | ~42 MB |
 | OpenAI API | Per token, own key | No | **Yes** | Yes | High | Network-bound | 0 |
 
 | Refinement backend | Recurring cost | Offline | Privacy | Quality | RAM | Storage |

@@ -13,52 +13,63 @@ of which experiments could not be run in this environment.
 
 ---
 
-## 2. Nothing has been run on an Android device
+## 2. Most of the Android layer has still never run
 
-The environment that produced this repository had no device and no emulator. The
-Android layer compiles and packages, and CI verifies claims about the built
-APK's manifest, but **no runtime behaviour has been observed**.
+An emulator job now covers the Android Keystore, app-private model storage and
+clipboard writes (see `TEST_RESULTS.md`). Everything else in the Android layer
+compiles and packages but **has not been observed running**.
 
-Concretely unverified: whether speech recognition works across OEM recognisers,
-whether the UI renders correctly, whether the Quick Settings tile behaves on API
-34+, whether clipboard auto-clear fires, whether Keystore reports hardware
-backing, whether the text-selection menu item appears in real apps, and whether
-the accessibility service detects focus and inserts text as intended.
+Concretely unverified: whether speech recognition works at all in practice,
+whether the Compose UI renders and survives rotation and process death, whether
+the Quick Settings tile behaves on API 34+, whether the text-selection menu item
+appears in WhatsApp or Gmail, and whether the accessibility service detects focus
+and inserts text as intended.
 
-Treat the Android layer as reviewed code, not as a working product.
+No real handset has run this. Treat the untested parts as reviewed code, not as
+a working product.
 
 ---
 
-## 3. Local ASR is not implemented
+## 3. Local ASR is implemented, but never heard a word
 
-This is the largest gap against the brief's preferred architecture.
+`VoskTranscriptionProvider` is real: Vosk is compiled in
+(`com.alphacephei:vosk-android`, Apache-2.0, prebuilt native libraries), audio
+streams from `AudioRecord` into the recogniser, and partial results are emitted
+as the user speaks. The download, checksum-verification and install path is
+complete and covered by unit and emulator tests.
 
-**What exists:** the model catalogue with full metadata, SHA-256 stream
-verification, and a download guard that refuses unpinned or non-HTTPS
-artifacts — all unit-tested.
+**What has not happened is recognition.** That needs a microphone and a
+downloaded model, and the environment that produced this code had neither. So
+accuracy, latency, real-time factor, partial-result cadence, long-dictation
+stability, memory and battery are all unmeasured. `MODEL_COMPARISON.md` lists
+what a real evaluation would have to cover.
 
-**What does not:** the inference runtime. Neither whisper.cpp nor sherpa-onnx is
-compiled in, so there is nothing to hand a downloaded model to. Selecting "Local
-model" in Settings falls back to the platform on-device recogniser rather than
-presenting a dead option.
+### No model checksum is pinned, so no model can be downloaded
 
-**What it would take:** an NDK build of the chosen runtime, JNI bindings, a
-`TranscriptionProvider` implementation, audio capture and chunking, and the
-device benchmarking in `MODEL_COMPARISON.md`.
-
-### No model checksum is pinned
-
-Every catalogue entry ships `sha256 = UNPINNED`, and the guard refuses to
-download any of them.
+Every catalogue entry ships `sha256 = UNPINNED`, and the guard refuses all of
+them before any network request.
 
 This is deliberate. A checksum is worth something only if it was computed from
-an artifact the publisher actually published, and this environment had no
-network route to the model hosts. Shipping a plausible-looking but unverified
-hash would be worse than shipping none, because it would look like a guarantee.
+an artifact the publisher actually published, and the model host was unreachable
+from the environment this was written in. Shipping a plausible-looking but
+unverified hash would be worse than shipping none, because it would look like a
+guarantee.
 
-`tools/pin-models.sh` downloads each artifact, prints its SHA-256, and rewrites
-the catalogue. A test asserts no entry carries a well-formed hash, so a
-plausible one pasted in without verification fails the build.
+**To make the app usable:** run the `Model checksums` workflow
+(`.github/workflows/model-checksums.yml`), which downloads each archive and
+prints its real SHA-256, then paste those into `CandidateModels.kt`. That same
+job then runs on every push and *fails* if a published archive stops matching —
+so pinning converts it from a reporting tool into a supply-chain assertion.
+
+Until that is done, the app falls back to the Android platform recogniser, and
+the pipeline banner correctly stops claiming "local".
+
+### Hindi is Hindi, not code-switching
+
+The Hindi model recognises Hindi. It does **not** handle Hindi-inside-English or
+Telugu-inside-English code-switching, which the brief asks about — Vosk's
+single-language models cannot do that, and no model in the catalogue claims to.
+Telugu is not offered at all.
 
 ---
 
@@ -188,7 +199,11 @@ see `BUILDING.md`.
 
 ## 13. Smaller gaps
 
-- **No instrumented tests.** They would need a device to be meaningful.
+- **Emulator tests cover only three areas** (Keystore, model storage, clipboard
+  writes). The UI, speech, and Flow Mode have no instrumented coverage.
+- **`isHardwareBacked()` is unverified.** A CI emulator has no TEE or StrongBox,
+  so the code path that reports hardware backing has never returned true in a
+  test.
 - **No dependency verification metadata.** Gradle's `verification-metadata.xml`
   would be the next supply-chain step.
 - **No licence file.** Add one before distributing.

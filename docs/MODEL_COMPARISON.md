@@ -2,7 +2,7 @@
 
 ## Read this before the tables
 
-**No figure in this document was measured by this project.**
+**No performance figure in this document was measured by this project.**
 
 The brief asked for benchmarks on real Android hardware: word error rate,
 real-time factor, RAM, sustained battery, thermal throttling, accuracy on Indian
@@ -10,76 +10,64 @@ English, Hindi and Telugu code-switching, and stability across 30-second to
 20-minute dictations.
 
 None of that was possible. The environment that produced this source tree had no
-Android device, no emulator, and no network access to the model hosts. Running
-those benchmarks requires all three.
+Android device, no emulator with a microphone, and no network access to the
+model hosts. Running those benchmarks requires all three.
 
 So this document does two things and is explicit about which is which:
 
-- **Published figures** — numbers reported by the projects themselves or by
-  third-party write-ups. Useful for selecting candidates. Not verification.
-- **Structural analysis** — properties that follow from a model's architecture
-  and are true regardless of hardware (streaming vs. non-streaming, language
-  coverage, licence).
+- **Published figures** — numbers reported by the projects themselves. Useful
+  for selecting candidates. Not verification.
+- **Structural analysis** — properties that follow from an engine's
+  architecture and are true regardless of hardware (streaming vs. not, language
+  coverage, licence, whether native code is downloaded at runtime).
 
 `TEST_RESULTS.md` lists what would have to be run to turn this into a real
 evaluation.
 
 ---
 
-## Candidates and why they were shortlisted
+## The decision: Vosk
 
-### Whisper (via whisper.cpp) — chosen as the primary family
+The engine actually integrated is **Vosk** (`com.alphacephei:vosk-android`,
+Apache-2.0). The reasoning was structural rather than benchmark-driven, because
+benchmarks were not available:
 
-**Structural properties (verifiable without a device):**
-- Encoder-decoder over 30-second windows. **Not a streaming architecture** — it
-  transcribes a completed chunk. Partial results during a long dictation require
-  chunking, with the accuracy cost that implies at chunk boundaries.
-- `small` and above are multilingual, which matters for the Hindi and Telugu
-  code-switching the brief asks about. The `.en` variants are English-only.
-- MIT licensed, weights and runtime.
-- `.bin` model files are data consumed by a C++ runtime — no native library is
-  downloaded, which matters for the supply-chain rules in `THREAT_MODEL.md` #24.
+**1. It is the only maintained Android ASR runtime that publishes prebuilt
+native libraries to Maven Central.** Everything else would require an NDK build
+in this project's CI, or - far worse - downloading native code at runtime.
+That second option is unacceptable here: `ModelInstaller` refuses to unpack
+`.so` files precisely so that a "model" can never be native code. An engine
+whose distribution model requires downloading binaries would have forced that
+defence to be weakened.
 
-**Published figures:**
+**2. It streams.** Vosk is a Kaldi-style recogniser that emits partial results
+while the user is still speaking. The product's whole interaction depends on
+seeing the draft form as you talk. Whisper, by contrast, is an encoder-decoder
+over 30-second windows: it transcribes a completed chunk, so partials require
+chunking with an accuracy cost at the boundaries.
 
-| Model | Download | Reported runtime RAM | Reported speed |
-|---|---|---|---|
-| tiny.en | ~75 MB (q5_1: ~32 MB) | ~390 MB | Redmi Note 12, tiny-q8_0: ~1.4× real-time |
-| base.en | ~142 MB (q5_1: ~60 MB) | ~500 MB | Pixel 8, base-q4_0: ~1.2× real-time |
-| small | ~466 MB (q5_1: ~190 MB) | ~1.0 GB | Galaxy S23, small-q4_0: ~0.9× real-time |
-| medium / large | — | — | Generally considered too memory-hungry for phones |
+**3. It has the languages the brief actually asks about** — including a
+dedicated **Indian English** model, in both small and large sizes, and Hindi.
+For a product whose stated context is Indian English, an engine with an
+accent-specific model matters more than a marginally better general-English
+WER.
 
-Quantised variants (`q5_1`, `q4_0`) are what the catalogue points at: they cut
-download and memory substantially at a modest accuracy cost, which is the right
-trade on a phone.
+### What choosing Vosk gives up
 
-### sherpa-onnx / Zipformer transducer — chosen as the streaming option
+Stated plainly, because it is a real trade:
 
-**Structural properties:**
-- A transducer, so it **is** a streaming architecture: genuine partial results
-  as the user speaks, which Whisper cannot provide natively.
-- Apache-2.0.
-- Ships ONNX model files plus a runtime.
+- **Whisper is generally more accurate**, especially on hard audio, and is
+  multilingual in one model. Vosk models are single-language.
+- **No code-switching.** Vosk's per-language models cannot handle
+  Hindi-inside-English or Telugu-inside-English, which the brief does ask for.
+  Whisper's multilingual models handle it better. **No model in the catalogue
+  claims to do this**, and `LIMITATIONS.md` says so.
+- **No Telugu model** is offered.
 
-**Published figures:**
-- Pixel 6, streaming Zipformer with NNAPI: RTF ~0.035, ~352 MB RAM, ~2%
-  battery/hour.
-- iPhone 15 Pro, streaming Zipformer EN: RTF ~0.054, ~45 MB RAM.
-- int8 quantisation: ~48% size reduction at comparable accuracy; int4: ~73%
-  smaller with minor degradation for streaming ASR.
-
-**Caveat:** RTF figures from a Pixel 6 with NNAPI tell you little about a
-mid-range device with no NPU. This is exactly the gap real benchmarking would
-close.
-
-### Considered and not shortlisted
-
-| Candidate | Why not |
-|---|---|
-| NVIDIA Parakeet | Strong accuracy, but Android deployment is not a maintained, documented path. Would need bespoke export work before it could be evaluated. |
-| Moonshine | Promising for short-form on-device ASR; smaller ecosystem and less Android tooling than the two above. Worth revisiting. |
-| Vosk | Mature Android support, but generally weaker accuracy and punctuation than Whisper or Zipformer for this use case. |
-| Cloud-only ASR | Contradicts the product's primary tier. Available as Tier 3. |
+If code-switching turns out to matter more than streaming, the
+`TranscriptionProvider` interface is the seam to swap at: a whisper.cpp provider
+would slot in beside the Vosk one without touching the composer, the command
+router, or anything in `core`.
 
 ---
 
@@ -89,18 +77,31 @@ close.
 
 | Tier | Model | Download | Streaming | Languages |
 |---|---|---|---|---|
-| Fast | Whisper tiny.en (q5_1) | ~32 MB | No | English |
-| Balanced | Whisper base.en (q5_1) | ~60 MB | No | English |
-| High accuracy | Whisper small (q5_1) | ~190 MB | No | Multilingual (en, hi, te, …) |
-| Streaming | Zipformer transducer EN | ~350 MB | **Yes** | English |
+| Fast | `vosk-model-small-en-us-0.15` | ~40 MB | Yes | English (US) |
+| Fast | `vosk-model-small-en-in-0.4` | ~36 MB | Yes | **English (Indian)** |
+| High accuracy | `vosk-model-en-in-0.5` | ~1 GB | Yes | **English (Indian)** |
+| Fast | `vosk-model-small-hi-0.22` | ~42 MB | Yes | Hindi |
 
-### Every entry is marked `UNPINNED`, and downloads are refused
+The app recommends the Indian English model for an `en-IN` device locale and
+the Hindi model for `hi`, falling back to US English.
 
-This is the most important thing in this document.
+**Published figures** for Vosk small models: roughly 40 MB on disk and a few
+hundred MB of RAM while loaded, running faster than real time on modern phones.
+Those are the project's own figures, not measurements taken here.
 
-A SHA-256 checksum is worth something only if it was computed from an artifact
-the publisher actually published. This source tree was produced with no access
-to the model hosts, so the honest options were:
+---
+
+## Checksums: why none are pinned, and how that is enforced
+
+This is the most important part of this document.
+
+Every catalogue entry ships `sha256 = UNPINNED`, and `ModelDownloadGuard`
+refuses to download any of them **before any network request is made**. A test
+asserts this for every entry.
+
+A checksum is worth something only if it was computed from an artifact the
+publisher actually published. The model host was unreachable from the
+environment this was written in, so the honest options were:
 
 1. ship checksums that had never been verified against a real download, or
 2. ship none, and make the app refuse to download until they are pinned.
@@ -108,23 +109,67 @@ to the model hosts, so the honest options were:
 We chose (2). A plausible-looking but unverified hash is *worse* than an absent
 one, because it looks like a guarantee.
 
-`ModelDownloadGuard.check()` refuses any model whose checksum is `UNPINNED` or
-malformed, **before any network request is made**. There is a test asserting
-that every catalogue entry currently fails this check, and a second test
-asserting that no entry carries a well-formed hash — which would fail the build
-if someone pasted a plausible hash in later without verifying it.
+### The mechanism that fixes it
 
-To pin them, run `tools/pin-models.sh`, which downloads each artifact from its
-canonical URL, prints the SHA-256, and rewrites the catalogue.
+`.github/workflows/model-checksums.yml` runs `tools/verify-model-checksums.sh`,
+which downloads each archive from its canonical URL and:
 
-### The runtime is not bundled
+- **reports** the SHA-256 and real size for entries still marked `UNPINNED`;
+- **asserts** the hash for entries already pinned, and **fails the job** if a
+  published archive no longer matches.
 
-Neither whisper.cpp nor sherpa-onnx is compiled into this build. The catalogue,
-the verifier and the download guard are implemented and tested; the inference
-engine is not integrated. Selecting "Local model" in Settings falls back to the
-Android on-device recogniser rather than presenting a dead option.
+So pinning the values does not just enable downloads — it converts that job from
+a reporting tool into a standing supply-chain assertion, run on every push to
+the catalogue and weekly on a schedule. An upstream substitution fails CI rather
+than reaching users.
 
-See `LIMITATIONS.md`.
+A second test asserts every checksum is either the `UNPINNED` sentinel or 64
+lowercase hex characters, so a truncated or malformed hash pasted in later fails
+the build rather than only surfacing as a failed download on someone's phone.
+
+---
+
+## What the app does with an archive once it has it
+
+Worth stating alongside the checksum, because the checksum is not the only
+defence — a compromised publisher account would give an attacker both the file
+and the hash we pin against.
+
+`ModelInstaller` therefore refuses, independently of any checksum:
+
+- entries that resolve outside the target directory (zip slip), including deep
+  traversal and absolute entry names;
+- `.so`, `.dex`, `.apk`, `.jar`, `.sh`, `.dll`, `.dylib`, `.exe` entries — a
+  speech model is data, and native code arriving in one means something is
+  wrong;
+- archives exceeding a total size or entry-count bound (zip bomb).
+
+Extracted files are marked non-executable, and a failed extract deletes the
+partial install. All of this is unit-tested, and the traversal and native-code
+defences are additionally tested on a real Android filesystem.
+
+---
+
+## Candidates considered
+
+| Engine | Streaming | Android distribution | Languages | Why not chosen |
+|---|---|---|---|---|
+| **Vosk** | **Yes** | **Prebuilt AAR on Maven Central** | Per-language, incl. Indian English + Hindi | **Chosen** |
+| Whisper (whisper.cpp) | No — 30s windows | Needs an NDK build | Multilingual in one model, handles code-switching | No streaming; NDK build; still the best fallback if code-switching matters more |
+| sherpa-onnx / Zipformer | Yes | No Maven Central artifact (checked: 404) | Mostly per-language | Would need an NDK build or runtime binary download |
+| NVIDIA Parakeet | Yes | No maintained Android path | English | Would need bespoke export work before it could even be evaluated |
+| Moonshine | Yes | Small ecosystem | English | Promising for short-form; less Android tooling. Worth revisiting |
+| Cloud ASR | Yes | n/a | Many | Contradicts the primary tier. Available as Tier 3 |
+
+**Published figures, for reference only** (from the projects themselves, not
+measured here):
+
+- Whisper on Android: `tiny.en` ~75 MB / ~390 MB RAM; `base.en` ~142 MB /
+  ~500 MB RAM; `small` ~466 MB / ~1 GB RAM. Quantised variants cut this
+  substantially. `medium` and above are generally too memory-hungry for phones.
+- sherpa-onnx streaming Zipformer on a Pixel 6 with NNAPI: RTF ~0.035, ~352 MB
+  RAM, ~2% battery/hour. Note how little that tells you about a mid-range device
+  with no NPU — which is exactly the gap real benchmarking would close.
 
 ---
 
