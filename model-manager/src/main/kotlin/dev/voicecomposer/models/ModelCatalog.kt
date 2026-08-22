@@ -42,7 +42,7 @@ data class ModelDescriptor(
  * Recorded per model so the app refuses to hand a file to the wrong runtime,
  * and so a "model" file can never be loaded as a native library (section 8).
  */
-enum class ModelRuntime { WHISPER_CPP, SHERPA_ONNX }
+enum class ModelRuntime { VOSK }
 
 /** Why a candidate model file was rejected. */
 sealed interface VerificationResult {

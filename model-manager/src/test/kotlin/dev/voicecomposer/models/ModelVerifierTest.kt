@@ -27,7 +27,7 @@ class ModelVerifierTest {
         languages = listOf("en"),
         supportsStreaming = false,
         approximateRuntimeRamBytes = 1,
-        runtime = ModelRuntime.WHISPER_CPP,
+        runtime = ModelRuntime.VOSK,
     )
 
     @Test
@@ -88,7 +88,7 @@ class ModelVerifierTest {
 
 class ModelDownloadGuardTest {
 
-    private val pinned = CandidateModels.whisperBaseEn.copy(
+    private val pinned = CandidateModels.smallEnUs.copy(
         sha256 = "a".repeat(64),
     )
 
@@ -114,9 +114,9 @@ class ModelDownloadGuardTest {
     }
 
     @Test
-    fun `a model with no pinned checksum is refused before any network request`() {
-        // Every model shipped in this source tree is currently in this state.
-        for (model in CandidateModels.all) {
+    fun `an unpinned model is refused before any network request is made`() {
+        val unpinned = CandidateModels.all.filter { it.sha256 == CandidateModels.UNPINNED }
+        for (model in unpinned) {
             val permission = ModelDownloadGuard.check(
                 model,
                 userApproved = true,
@@ -170,14 +170,34 @@ class ModelDownloadGuardTest {
     }
 
     @Test
-    fun `no shipped catalog entry claims a checksum it cannot back up`() {
-        // Guards against someone pasting in a plausible-looking hash later
-        // without running tools_pin-models.sh against the real artifact.
+    fun `every catalog checksum is either unpinned or well-formed`() {
+        // A durable invariant: it holds before pinning and after. It catches a
+        // truncated, uppercase or otherwise malformed hash being pasted in,
+        // which would otherwise only surface as a failed download on a device.
+        val hex = Regex("^[a-f0-9]{64}$")
         for (model in CandidateModels.all) {
-            assertFalse(
-                Regex("^[a-f0-9]{64}$").matches(model.sha256),
-                "${model.id} carries a hash that was never verified against a download",
+            val sha = model.sha256
+            assertTrue(
+                sha == CandidateModels.UNPINNED || hex.matches(sha),
+                "${model.id} has a checksum that is neither UNPINNED nor 64 lowercase hex chars: '$sha'",
             )
+        }
+    }
+
+    @Test
+    fun `recommended model follows the device language`() {
+        assertEquals(CandidateModels.smallEnIn, CandidateModels.recommendedFor("en-IN"))
+        assertEquals(CandidateModels.smallHi, CandidateModels.recommendedFor("hi-IN"))
+        assertEquals(CandidateModels.smallEnUs, CandidateModels.recommendedFor("en-US"))
+        assertEquals(CandidateModels.smallEnUs, CandidateModels.recommendedFor("de-DE"))
+    }
+
+    @Test
+    fun `every catalog model uses a runtime that consumes data, not native code`() {
+        // ModelInstaller refuses to unpack native libraries; this asserts the
+        // catalogue only ever points at runtimes for which that is sufficient.
+        for (model in CandidateModels.all) {
+            assertEquals(ModelRuntime.VOSK, model.runtime, model.id)
         }
     }
 }

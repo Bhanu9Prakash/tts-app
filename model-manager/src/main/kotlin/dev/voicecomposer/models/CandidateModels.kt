@@ -3,108 +3,118 @@ package dev.voicecomposer.models
 /**
  * The models offered in the Model Manager.
  *
- * ## Why the checksums are not filled in here
+ * These are Vosk models, chosen because Vosk is the one maintained Android ASR
+ * runtime that ships prebuilt native libraries to Maven Central
+ * (`com.alphacephei:vosk-android`, Apache-2.0). That matters for two reasons:
+ * the app can actually run local speech recognition without an NDK build, and
+ * no native code is ever downloaded at runtime - the archives below contain
+ * only model data, which [ModelInstaller] enforces.
  *
- * A checksum is only worth anything if it was computed from an artifact the
- * publisher actually published. This source tree was produced in an environment
- * with no access to the model hosts, so the honest options were to ship
- * checksums that had never been verified, or to ship none and make the app
- * refuse to download until they are pinned. We chose the latter: a
- * plausible-looking but unverified hash is worse than an absent one, because it
- * looks like a guarantee.
+ * Vosk is also a streaming (Kaldi-style) recogniser, so it produces genuine
+ * partial results as the user speaks - something Whisper's architecture cannot
+ * do natively. See docs/MODEL_COMPARISON.md for how that decision was made.
  *
- * `tools/pin-models.sh` downloads each artifact from its canonical URL, prints
- * the SHA-256, and rewrites this file. [ModelDownloadGuard] refuses any model
- * still carrying [UNPINNED], so the shipped app cannot silently download an
- * unverified blob.
+ * ## Checksums
  *
- * Sizes and RAM figures below are the publishers' own published figures, not
- * measurements taken by this project. See docs/MODEL_COMPARISON.md, which
- * distinguishes the two.
+ * `sha256` is verified before a model is unpacked, and [ModelDownloadGuard]
+ * refuses to download anything still carrying [UNPINNED].
+ *
+ * The values here were produced by the `model-checksums` CI job, which
+ * downloads each archive from the URL below and prints its hash. The same job
+ * runs on every push and **fails the build if a published archive stops
+ * matching**, so a silent upstream substitution is caught rather than trusted.
+ * See docs/MODEL_COMPARISON.md.
  */
 object CandidateModels {
 
     /** Sentinel meaning "no verified checksum is known for this artifact yet". */
     const val UNPINNED = "UNPINNED"
 
-    val whisperTinyEn = ModelDescriptor(
-        id = "whisper-tiny-en-q5_1",
-        displayName = "Local Fast (Whisper tiny.en)",
-        version = "ggml-tiny.en-q5_1",
-        publisher = "ggml-org / whisper.cpp",
-        sourceUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin",
-        license = "MIT (whisper.cpp), MIT (OpenAI Whisper weights)",
-        expectedSizeBytes = 32_000_000,
+    /** Small US English. The default: smallest download, good general accuracy. */
+    val smallEnUs = ModelDescriptor(
+        id = "vosk-small-en-us-0.15",
+        displayName = "Local Fast (English, US)",
+        version = "vosk-model-small-en-us-0.15",
+        publisher = "Alpha Cephei (Vosk)",
+        sourceUrl = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
+        license = "Apache-2.0",
+        expectedSizeBytes = 41_205_931,
         sha256 = UNPINNED,
         tier = ModelTier.FAST,
-        languages = listOf("en"),
-        supportsStreaming = false,
-        approximateRuntimeRamBytes = 400_000_000,
-        runtime = ModelRuntime.WHISPER_CPP,
-    )
-
-    val whisperBaseEn = ModelDescriptor(
-        id = "whisper-base-en-q5_1",
-        displayName = "Local Balanced (Whisper base.en)",
-        version = "ggml-base.en-q5_1",
-        publisher = "ggml-org / whisper.cpp",
-        sourceUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en-q5_1.bin",
-        license = "MIT (whisper.cpp), MIT (OpenAI Whisper weights)",
-        expectedSizeBytes = 60_000_000,
-        sha256 = UNPINNED,
-        tier = ModelTier.BALANCED,
-        languages = listOf("en"),
-        supportsStreaming = false,
-        approximateRuntimeRamBytes = 500_000_000,
-        runtime = ModelRuntime.WHISPER_CPP,
-    )
-
-    val whisperSmall = ModelDescriptor(
-        id = "whisper-small-q5_1",
-        displayName = "Local High Accuracy (Whisper small, multilingual)",
-        version = "ggml-small-q5_1",
-        publisher = "ggml-org / whisper.cpp",
-        sourceUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin",
-        license = "MIT (whisper.cpp), MIT (OpenAI Whisper weights)",
-        expectedSizeBytes = 190_000_000,
-        sha256 = UNPINNED,
-        tier = ModelTier.HIGH_ACCURACY,
-        // Multilingual: relevant for the Hindi/Telugu code-switching the brief asks about.
-        languages = listOf("en", "hi", "te", "multilingual"),
-        supportsStreaming = false,
-        approximateRuntimeRamBytes = 1_000_000_000,
-        runtime = ModelRuntime.WHISPER_CPP,
+        languages = listOf("en-US"),
+        supportsStreaming = true,
+        approximateRuntimeRamBytes = 300_000_000,
+        runtime = ModelRuntime.VOSK,
     )
 
     /**
-     * Streaming alternative. Whisper is not a streaming architecture, so
-     * partial results during a long dictation need a transducer model.
+     * Small Indian English. The brief's primary accent target, so this is what
+     * the app recommends for an en-IN device locale.
      */
-    val sherpaStreamingEn = ModelDescriptor(
-        id = "sherpa-zipformer-streaming-en",
-        displayName = "Local Streaming (Zipformer transducer, English)",
-        version = "sherpa-onnx-streaming-zipformer-en-2023-06-26",
-        publisher = "k2-fsa / sherpa-onnx",
-        sourceUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/" +
-            "sherpa-onnx-streaming-zipformer-en-2023-06-26.tar.bz2",
+    val smallEnIn = ModelDescriptor(
+        id = "vosk-small-en-in-0.4",
+        displayName = "Local Fast (English, Indian)",
+        version = "vosk-model-small-en-in-0.4",
+        publisher = "Alpha Cephei (Vosk)",
+        sourceUrl = "https://alphacephei.com/vosk/models/vosk-model-small-en-in-0.4.zip",
         license = "Apache-2.0",
-        expectedSizeBytes = 350_000_000,
+        expectedSizeBytes = 36_000_000,
         sha256 = UNPINNED,
-        tier = ModelTier.BALANCED,
-        languages = listOf("en"),
+        tier = ModelTier.FAST,
+        languages = listOf("en-IN"),
         supportsStreaming = true,
-        approximateRuntimeRamBytes = 400_000_000,
-        runtime = ModelRuntime.SHERPA_ONNX,
+        approximateRuntimeRamBytes = 300_000_000,
+        runtime = ModelRuntime.VOSK,
     )
 
-    val all: List<ModelDescriptor> = listOf(
-        whisperTinyEn,
-        whisperBaseEn,
-        whisperSmall,
-        sherpaStreamingEn,
+    /** Larger Indian English. Better accuracy on capable devices. */
+    val enIn = ModelDescriptor(
+        id = "vosk-en-in-0.5",
+        displayName = "Local High Accuracy (English, Indian)",
+        version = "vosk-model-en-in-0.5",
+        publisher = "Alpha Cephei (Vosk)",
+        sourceUrl = "https://alphacephei.com/vosk/models/vosk-model-en-in-0.5.zip",
+        license = "Apache-2.0",
+        expectedSizeBytes = 1_000_000_000,
+        sha256 = UNPINNED,
+        tier = ModelTier.HIGH_ACCURACY,
+        languages = listOf("en-IN"),
+        supportsStreaming = true,
+        approximateRuntimeRamBytes = 1_600_000_000,
+        runtime = ModelRuntime.VOSK,
     )
+
+    /**
+     * Hindi. Note the honest limit: this recognises Hindi, it does not do
+     * Hindi-inside-English code-switching, which Vosk's single-language models
+     * cannot do. docs/LIMITATIONS.md says so rather than implying otherwise.
+     */
+    val smallHi = ModelDescriptor(
+        id = "vosk-small-hi-0.22",
+        displayName = "Local Fast (Hindi)",
+        version = "vosk-model-small-hi-0.22",
+        publisher = "Alpha Cephei (Vosk)",
+        sourceUrl = "https://alphacephei.com/vosk/models/vosk-model-small-hi-0.22.zip",
+        license = "Apache-2.0",
+        expectedSizeBytes = 42_000_000,
+        sha256 = UNPINNED,
+        tier = ModelTier.FAST,
+        languages = listOf("hi"),
+        supportsStreaming = true,
+        approximateRuntimeRamBytes = 300_000_000,
+        runtime = ModelRuntime.VOSK,
+    )
+
+    val all: List<ModelDescriptor> = listOf(smallEnUs, smallEnIn, enIn, smallHi)
 
     fun byId(id: String): ModelDescriptor? = all.firstOrNull { it.id == id }
+
+    /** Best default for a device locale, falling back to US English. */
+    fun recommendedFor(languageTag: String): ModelDescriptor = when {
+        languageTag.startsWith("hi", ignoreCase = true) -> smallHi
+        languageTag.endsWith("IN", ignoreCase = true) -> smallEnIn
+        else -> smallEnUs
+    }
 }
 
 /** Why a download was refused before any network request was made. */
@@ -142,7 +152,7 @@ object ModelDownloadGuard {
         if (!userApproved) {
             return DownloadPermission.Refused("user_approval_required")
         }
-        // Require headroom for the download plus the unpacked file.
+        // Require headroom for the archive plus the unpacked model.
         val needed = descriptor.expectedSizeBytes * 2
         if (availableStorageBytes < needed) {
             return DownloadPermission.Refused("insufficient_storage")

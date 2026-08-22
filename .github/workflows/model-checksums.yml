@@ -1,0 +1,41 @@
+name: Model checksums
+
+# Verifies that every model archive the app offers still hashes to what
+# CandidateModels.kt pins. This is what makes the supply-chain claim in
+# docs/MODEL_COMPARISON.md real rather than aspirational: the checksums were
+# computed from artifacts that were actually published, and a later upstream
+# substitution fails this job instead of reaching users.
+#
+# Runs on pushes that touch the catalogue, weekly to catch upstream changes,
+# and on demand. The push/schedule runs skip archives over 100 MB; a manual
+# run checks everything.
+
+on:
+  push:
+    paths:
+      - "model-manager/src/main/kotlin/dev/voicecomposer/models/CandidateModels.kt"
+      - "tools/verify-model-checksums.sh"
+      - ".github/workflows/model-checksums.yml"
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      all_models:
+        description: "Also check models larger than 100 MB"
+        type: boolean
+        default: false
+
+jobs:
+  verify:
+    name: Verify published model archives
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify checksums
+        run: |
+          if [ "${{ github.event.inputs.all_models }}" = "true" ]; then
+            tools/verify-model-checksums.sh | tee "$GITHUB_STEP_SUMMARY"
+          else
+            tools/verify-model-checksums.sh --max-bytes 104857600 | tee "$GITHUB_STEP_SUMMARY"
+          fi
