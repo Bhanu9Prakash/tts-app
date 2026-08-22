@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PersistableBundle
+import dev.voicecomposer.core.ClipboardClearPolicy
 import dev.voicecomposer.security.SafeLog
 import dev.voicecomposer.settings.ClipboardAutoClear
 import dev.voicecomposer.settings.SettingsRepository
@@ -70,12 +71,23 @@ class ClipboardWriter(
      * Without this check we would wipe whatever the user copied in the
      * meantime, from some other app - a clipboard writer that deletes other
      * apps' data is itself a bug.
+     *
+     * The decision lives in [ClipboardClearPolicy] so it can be unit-tested:
+     * Android refuses clipboard reads to unfocused apps, which makes this
+     * untestable on device. See that class for the reasoning.
      */
     private fun clearIfStillOurs(written: String) {
-        val current = runCatching { clipboard.primaryClip } .getOrNull() ?: return
-        val stillOurs = current.itemCount > 0 &&
-            current.description?.label == LABEL &&
-            current.getItemAt(0)?.text?.toString() == written
+        val current = runCatching { clipboard.primaryClip }.getOrNull()
+        val currentLabel = current?.description?.label?.toString()
+        val currentText = current?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)?.text?.toString()
+
+        val stillOurs = ClipboardClearPolicy.shouldClear(
+            ourLabel = LABEL,
+            ourText = written,
+            currentLabel = currentLabel,
+            currentText = currentText,
+        )
 
         if (!stillOurs) return
 
