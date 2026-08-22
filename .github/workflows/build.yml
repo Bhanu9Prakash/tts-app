@@ -164,6 +164,13 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: ./gradlew connectedSafeDebugAndroidTest --no-daemon --stacktrace
 
+      # Gradle's failure output for connected tests is a wall of framework
+      # stack trace with the actual assertion buried in it. Print the results
+      # XML so a failure is diagnosable from the log alone.
+      - name: Print instrumented test failures
+        if: failure()
+        run: tools/print-test-failures.py app/build/outputs/androidTest-results
+
       - name: Upload instrumentation reports
         if: always()
         uses: actions/upload-artifact@v4
