@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Minimum-scope accessibility configuration (product brief section 18).
+
+  What is requested and why:
+
+    accessibilityEventTypes
+      typeViewFocused | typeViewAccessibilityFocused
+        - to know that an editable field took focus, so the bubble can appear.
+      typeWindowStateChanged | typeWindowsChanged
+        - to know which app is in the foreground, so Sensitive Apps Protection
+          can hide the bubble.
+
+  What is deliberately NOT requested, and the capability we give up by omitting it:
+
+    typeViewTextChanged
+      Would deliver the user's keystrokes in other apps. Omitted: this is the
+      single most abusable accessibility event, and bubble visibility does not
+      need it.
+
+    typeNotificationStateChanged
+      Would deliver the content of every notification. Omitted entirely.
+
+    typeViewTextSelectionChanged, typeViewScrolled, typeViewClicked
+      Not needed for focus tracking.
+
+    canRetrieveWindowContent / flagRetrieveInteractiveWindows
+      canRetrieveWindowContent is required to perform ACTION_SET_TEXT, which is
+      how approved text is inserted. It is the one broad capability we cannot
+      avoid in Flow Mode, and docs/PERMISSIONS.md states plainly what it could
+      expose. We never traverse the node tree for content: the service reads
+      only the focused node's *type flags* (isPassword, inputType, autofill
+      hints), never its text.
+
+    canRequestFilterKeyEvents
+      Would make the service a key logger. Omitted.
+
+    canPerformGestures
+      Not needed. Omitted.
+
+  packageNames is intentionally unset: restricting to a list would require us
+  to enumerate every app the user might type in, and an omission would silently
+  break the feature. Scope is instead limited by event type above.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeViewFocused|typeViewAccessibilityFocused|typeWindowStateChanged|typeWindowsChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagReportViewIds"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/flow_service_description"
+    android:notificationTimeout="100"
+    android:settingsActivity="dev.voicecomposer.ui.SettingsActivity" />

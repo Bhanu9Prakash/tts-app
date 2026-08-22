@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      Permissions. Every one is justified in docs/PERMISSIONS.md, and the list
+      here is the Safe Mode baseline: it contains no overlay permission and no
+      accessibility service. Those exist only in the "enhanced" flavour's
+      manifest, so an APK built from the "safe" flavour cannot request them at
+      all - verifiable with `aapt dump permissions`.
+    -->
+
+    <!-- Core function: capturing what the user dictates. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!--
+      Note what is NOT here. In Safe Mode, recording only ever happens while a
+      Voice Composer screen is in the foreground, so this flavour needs no
+      foreground-service permission and no notification permission. Those, and
+      the overlay permission, exist only in the enhanced flavour's manifest.
+      The result is that a "safe" APK requests three permissions in total, which
+      the user can confirm with `aapt dump permissions` before installing.
+
+      The trade-off is documented in docs/LIMITATIONS.md: dictation stops if the
+      user leaves the app, and background/long-running dictation is an
+      enhanced-flavour capability.
+    -->
+
+    <!--
+      INTERNET is required only by optional subsystems: downloading a local
+      model, and BYOK cloud providers. The fully local configuration makes no
+      network calls. Android has no way to declare "network only when the user
+      opts in", so the permission is present and the restraint is enforced in
+      code and documented, rather than claimed.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+      Deliberately NOT requested:
+        QUERY_ALL_PACKAGES  - we never enumerate installed apps.
+        READ_/WRITE_EXTERNAL_STORAGE - models live in app-private storage.
+        RECEIVE_BOOT_COMPLETED - nothing needs to run at boot.
+    -->
+
+    <application
+        android:name=".VoiceComposerApp"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.VoiceComposer"
+        tools:targetApi="34">
+
+        <activity
+            android:name=".ui.ComposerActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          The documented, permission-free way to put approved text back into
+          another app. The user selects text anywhere, picks Voice Composer from
+          the selection menu, dictates a replacement, and we return it with
+          setResult. No Accessibility service is involved.
+
+          Exported by necessity - the system text-selection toolbar is the
+          caller. Input handling is defensive: see ProcessTextActivity.
+        -->
+        <activity
+            android:name=".ui.ProcessTextActivity"
+            android:exported="true"
+            android:label="@string/process_text_label"
+            android:theme="@style/Theme.VoiceComposer.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false"
+            android:label="@string/settings_title" />
+
+        <!--
+          Quick Settings tile: the safest system-wide activation surface. It
+          needs no overlay, no accessibility and no always-running process, and
+          the system enforces that the user placed it there themselves.
+
+          android:exported must be true and the BIND_QUICK_SETTINGS_TILE
+          permission restricts binding to the system.
+        -->
+        <service
+            android:name=".integration.VoiceComposerTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_mic"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="false" />
+        </service>
+
+    </application>
+</manifest>

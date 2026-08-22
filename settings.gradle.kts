@@ -7,6 +7,17 @@ pluginManagement {
         mavenCentral()
         google()
     }
+
+    // Versions are declared, not applied. Declaring them here rather than in
+    // the root build script means the Android plugins are only *resolved* when
+    // the :app module is actually configured - so a machine without the Android
+    // SDK (and without access to Google's Maven) can still build and test the
+    // JVM modules.
+    plugins {
+        id("com.android.application") version "8.5.2" apply false
+        id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+        id("org.jetbrains.kotlin.plugin.compose") version "2.0.21" apply false
+    }
 }
 
 dependencyResolutionManagement {

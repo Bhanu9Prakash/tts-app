@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Enhanced flavour only.
+
+  Everything in this file is absent from the "safe" APK. That is the point of
+  the flavour split (product brief section 19): a user who does not want an
+  accessibility-capable build can install voice-composer-safe.apk and verify
+  with `aapt dump permissions` that neither SYSTEM_ALERT_WINDOW nor any
+  accessibility service is present in the binary - rather than trusting a
+  runtime setting.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The floating bubble. Requires the user to grant "Display over other apps". -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!--
+      Flow Mode dictates while another app is in the foreground, so unlike Safe
+      Mode it genuinely needs a foreground microphone service - and therefore
+      the notification that makes that service visible to the user.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+
+        <!--
+          Flow Mode's accessibility service.
+
+          Scope is deliberately minimised in res/xml/flow_accessibility_config.xml:
+          we subscribe to focus and window-state events only, never to
+          TYPE_VIEW_TEXT_CHANGED, and we do not request
+          flagRetrieveInteractiveWindows. See docs/PERMISSIONS.md for what this
+          permission could expose even though we do not use it.
+        -->
+        <service
+            android:name="dev.voicecomposer.flow.FlowAccessibilityService"
+            android:exported="true"
+            android:label="@string/flow_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/flow_accessibility_config" />
+        </service>
+
+        <!-- Hosts the floating bubble window. Not exported. -->
+        <service
+            android:name="dev.voicecomposer.flow.BubbleOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+    </application>
+</manifest>
