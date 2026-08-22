@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.os.Build
 import android.util.Log
 import dev.voicecomposer.commands.CommandParser
+import dev.voicecomposer.models.CandidateModels
+import dev.voicecomposer.models.ModelRepository
 import dev.voicecomposer.refinement.OpenAiRefinementProvider
 import dev.voicecomposer.refinement.RefinementProvider
 import dev.voicecomposer.security.CredentialStore
@@ -15,6 +17,9 @@ import dev.voicecomposer.settings.SettingsRepository
 import dev.voicecomposer.settings.TranscriptionBackend
 import dev.voicecomposer.speech.AndroidSpeechProvider
 import dev.voicecomposer.speech.TranscriptionProvider
+import dev.voicecomposer.speech.VoskTranscriptionProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 
 class VoiceComposerApp : Application() {
 
@@ -27,12 +32,19 @@ class VoiceComposerApp : Application() {
     lateinit var providers: ProviderRegistry
         private set
 
+    lateinit var models: ModelRepository
+        private set
+
+    /** Outlives any one screen, so a long dictation survives rotation. */
+    val appScope = CoroutineScope(SupervisorJob())
+
     override fun onCreate() {
         super.onCreate()
 
         settings = SettingsRepository(this)
         credentials = CredentialStore(this)
-        providers = ProviderRegistry(this, settings, credentials)
+        models = ModelRepository(this)
+        providers = ProviderRegistry(this, settings, credentials, models, appScope)
 
         installLogSink()
         createNotificationChannel()
@@ -92,6 +104,8 @@ class ProviderRegistry(
     private val app: Application,
     private val settings: SettingsRepository,
     private val credentials: CredentialStore,
+    private val models: ModelRepository,
+    private val scope: CoroutineScope,
 ) {
 
     fun commandParser(): CommandParser =
@@ -109,16 +123,30 @@ class ProviderRegistry(
             TranscriptionBackend.ANDROID_DEFAULT ->
                 AndroidSpeechProvider.createDefault(app, settings.languageTag)
 
-            TranscriptionBackend.LOCAL_MODEL ->
-                // The local ASR runtime is not bundled in this build; see
-                // docs/LIMITATIONS.md. Falling back keeps the app usable rather
-                // than presenting a dead option.
-                AndroidSpeechProvider.createOnDevice(app, settings.languageTag)
-                    ?: AndroidSpeechProvider.createDefault(app, settings.languageTag)
+            TranscriptionBackend.LOCAL_MODEL -> localModelProvider()
+                // No model downloaded yet. Falling back keeps the app usable,
+                // and because the fallback reports its own processing location
+                // honestly the pipeline banner stops claiming "local" - it does
+                // not silently pretend the local model is running.
+                ?: AndroidSpeechProvider.createOnDevice(app, settings.languageTag)
+                ?: AndroidSpeechProvider.createDefault(app, settings.languageTag)
 
             TranscriptionBackend.OPENAI ->
                 AndroidSpeechProvider.createDefault(app, settings.languageTag)
         }
+
+    /**
+     * The user's selected local model, if one is actually installed.
+     *
+     * Returns null rather than throwing when the model is missing or was
+     * deleted, so the caller can fall back to something that still works.
+     */
+    private fun localModelProvider(): VoskTranscriptionProvider? {
+        val descriptor = settings.localModelId?.let { CandidateModels.byId(it) }
+            ?: CandidateModels.recommendedFor(settings.languageTag)
+        val root = models.installedRoot(descriptor) ?: return null
+        return VoskTranscriptionProvider(descriptor, root, scope)
+    }
 
     /**
      * The semantic provider, or null when the user has chosen deterministic-only.

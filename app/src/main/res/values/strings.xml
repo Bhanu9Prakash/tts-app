@@ -3,6 +3,7 @@
     <!-- app_name is supplied per flavour via resValue in build.gradle.kts. -->
     <string name="process_text_label">Rewrite with Voice Composer</string>
     <string name="settings_title">Settings</string>
+    <string name="model_manager_title">Speech models</string>
     <string name="tile_label">Voice Composer</string>
 
     <string name="flow_service_label">Voice Composer Flow Mode</string>

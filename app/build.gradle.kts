@@ -114,6 +114,11 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
+    // Fully local speech recognition. Apache-2.0, prebuilt native libraries on
+    // Maven Central, so no NDK build is required and no native code is ever
+    // downloaded at runtime - only model data, which ModelInstaller enforces.
+    implementation("com.alphacephei:vosk-android:0.3.75")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")

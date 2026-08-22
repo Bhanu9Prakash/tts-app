@@ -92,6 +92,11 @@
             android:exported="false"
             android:label="@string/settings_title" />
 
+        <activity
+            android:name=".ui.ModelManagerActivity"
+            android:exported="false"
+            android:label="@string/model_manager_title" />
+
         <!--
           Quick Settings tile: the safest system-wide activation surface. It
           needs no overlay, no accessibility and no always-running process, and

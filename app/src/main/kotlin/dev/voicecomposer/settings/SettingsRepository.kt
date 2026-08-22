@@ -38,6 +38,11 @@ class SettingsRepository(context: Context) {
         get() = enumOr(KEY_TRANSCRIPTION, TranscriptionBackend.ANDROID_ON_DEVICE)
         set(value) = prefs.edit().putString(KEY_TRANSCRIPTION, value.name).apply()
 
+    /** Which downloaded model to use. Null means "pick one for my language". */
+    var localModelId: String?
+        get() = prefs.getString(KEY_LOCAL_MODEL, null)
+        set(value) = prefs.edit().putString(KEY_LOCAL_MODEL, value).apply()
+
     var languageTag: String
         get() = prefs.getString(KEY_LANGUAGE, "en-IN") ?: "en-IN"
         set(value) = prefs.edit().putString(KEY_LANGUAGE, value).apply()
@@ -171,6 +176,7 @@ class SettingsRepository(context: Context) {
 
         private const val KEY_TRANSCRIPTION = "transcription_backend"
         private const val KEY_LANGUAGE = "language_tag"
+        private const val KEY_LOCAL_MODEL = "local_model_id"
         private const val KEY_REFINEMENT = "refinement_backend"
         private const val KEY_OPENAI_MODEL = "openai_refinement_model"
         private const val KEY_ACTIVATION = "activation_phrase"

@@ -1,5 +1,6 @@
 package dev.voicecomposer.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,6 +17,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,13 +40,23 @@ class SettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val settings = (application as VoiceComposerApp).settings
         setContent {
-            MaterialTheme { SettingsScreen(settings) }
+            MaterialTheme {
+                SettingsScreen(
+                    settings = settings,
+                    onOpenModelManager = {
+                        startActivity(Intent(this, ModelManagerActivity::class.java))
+                    },
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun SettingsScreen(settings: SettingsRepository) {
+private fun SettingsScreen(
+    settings: SettingsRepository,
+    onOpenModelManager: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -74,6 +86,16 @@ private fun SettingsScreen(settings: SettingsRepository) {
             transcription = TranscriptionBackend.ANDROID_DEFAULT
             settings.transcriptionBackend = transcription
         }
+        ChoiceRow(
+            label = "Downloaded local model",
+            subtitle = "Runs entirely on this device, with no network at all. " +
+                "Download a model first - nothing is downloaded without your tap.",
+            selected = transcription == TranscriptionBackend.LOCAL_MODEL,
+        ) {
+            transcription = TranscriptionBackend.LOCAL_MODEL
+            settings.transcriptionBackend = transcription
+        }
+        TextButton(onClick = onOpenModelManager) { Text("Manage speech models") }
 
         SectionHeader("Refinement")
         var refinement by remember { mutableStateOf(settings.refinementBackend) }
