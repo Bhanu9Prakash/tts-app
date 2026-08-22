@@ -222,6 +222,7 @@ real release must be signed with your own key** — see `docs/BUILDING.md`.
 | [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module layout, the pipeline, and why the security logic has no Android dependency |
 | [`PRIVACY.md`](docs/PRIVACY.md) | Defaults, what leaves the device and when, logging, backup, clipboard |
 | [`PERMISSIONS.md`](docs/PERMISSIONS.md) | Every permission justified, exported-component audit, verification instructions |
+| [`MODES.md`](docs/MODES.md) | Safe Mode vs Enhanced Flow Mode, feature by feature, and how to choose |
 | [`THREAT_MODEL.md`](docs/THREAT_MODEL.md) | 30 risks with likelihood, impact, mitigation and residual risk |
 | [`MODEL_COMPARISON.md`](docs/MODEL_COMPARISON.md) | Local ASR and refinement candidates, and why no checksum is pinned |
 | [`TEST_RESULTS.md`](docs/TEST_RESULTS.md) | What was tested, what was not, and what could not be |
