@@ -12,6 +12,4 @@
     <string name="notif_channel_recording_desc">Shown while Voice Composer is listening.</string>
     <string name="notif_recording_title">Listening</string>
     <string name="notif_recording_text">Tap Stop when you have finished speaking.</string>
-    <string name="notif_action_stop">Stop</string>
-    <string name="notif_action_cancel">Cancel</string>
 </resources>
