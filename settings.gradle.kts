@@ -1,0 +1,61 @@
+pluginManagement {
+    repositories {
+        // Order matters: everything the pure-JVM modules need lives on the
+        // first two repositories, so Google's Maven is only ever contacted for
+        // Android-only plugins (the Android Gradle Plugin).
+        gradlePluginPortal()
+        mavenCentral()
+        google()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        mavenCentral()
+        google()
+    }
+}
+
+rootProject.name = "voice-composer"
+
+// ---------------------------------------------------------------------------
+// Pure-JVM modules.
+//
+// Everything security-critical or logic-heavy lives here on purpose: these
+// modules have no Android dependency, so they compile and their tests execute
+// on any JDK without the Android SDK installed. See docs/ARCHITECTURE.md.
+// ---------------------------------------------------------------------------
+include(":core")
+include(":speech-api")
+include(":refinement-api")
+include(":commands")
+include(":refinement-local")
+include(":security")
+include(":model-manager")
+
+// ---------------------------------------------------------------------------
+// Android modules.
+//
+// The Android Gradle Plugin and the AndroidX/Compose artifacts are published
+// only on Google's Maven repository, and the SDK itself only through the
+// Android SDK manager. Where neither is reachable, we skip these modules
+// rather than failing the whole build, so `gradle test` still runs every JVM
+// test suite. Set ANDROID_HOME / ANDROID_SDK_ROOT, or write a local.properties
+// containing sdk.dir=..., to include them. See docs/BUILDING.md.
+// ---------------------------------------------------------------------------
+val androidSdkPresent: Boolean =
+    System.getenv("ANDROID_HOME") != null ||
+        System.getenv("ANDROID_SDK_ROOT") != null ||
+        File(rootDir, "local.properties").let { it.exists() && it.readText().contains("sdk.dir") }
+
+if (androidSdkPresent) {
+    include(":app")
+} else {
+    gradle.rootProject {
+        logger.lifecycle(
+            "[voice-composer] Android SDK not detected - configuring JVM modules only. " +
+                "The :app module (and therefore the APK) is skipped. See docs/BUILDING.md."
+        )
+    }
+}
