@@ -114,14 +114,24 @@ behaviour unverified."
 
 ### Verified by CI, not by a device
 
-Two claims *are* mechanically verified on every build, because CI checks the
-built artifact rather than trusting the source:
+**All four APKs build.** `assembleSafeDebug`, `assembleEnhancedDebug`,
+`assembleSafeRelease` and `assembleEnhancedRelease` all complete, including R8
+minification and resource shrinking on the release variants. So the Android
+layer is known to compile, link, and package — including the enhanced flavour's
+accessibility service and overlay.
+
+Two further claims are mechanically verified on every build, because CI
+inspects the packaged artifact rather than trusting the source:
 
 - The safe APK does not request `SYSTEM_ALERT_WINDOW`.
 - The safe APK declares no accessibility service.
 
-Both are asserted against the packaged APK with `aapt2`, and the build fails if
-either regresses.
+Both are asserted with `aapt2` against the built APK, and the build fails if
+either regresses. Every APK's SHA-256, size and full permission list is printed
+to the job summary of each run.
+
+What this does **not** establish is that any of it behaves correctly at
+runtime. Compiling and packaging is a much weaker claim than working.
 
 ---
 
