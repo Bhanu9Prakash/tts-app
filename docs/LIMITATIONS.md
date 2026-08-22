@@ -61,6 +61,14 @@ prints its real SHA-256, then paste those into `CandidateModels.kt`. That same
 job then runs on every push and *fails* if a published archive stops matching —
 so pinning converts it from a reporting tool into a supply-chain assertion.
 
+**Known snag:** on the runs attempted so far, `alphacephei.com` was slow enough
+from GitHub's runners that the job made no progress for the better part of an
+hour before being capped. The script now gives up after ten minutes per file
+and reports, rather than hanging. If the host stays unreachable from CI, run
+`tools/verify-model-checksums.sh` from any machine that can reach it — the
+output is the same, and it is the values that matter, not where they were
+computed.
+
 Until that is done, the app falls back to the Android platform recogniser, and
 the pipeline banner correctly stops claiming "local".
 

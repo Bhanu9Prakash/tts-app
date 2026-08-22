@@ -72,10 +72,15 @@ for i in $(seq 0 $((n - 1))); do
 
   file="$WORK/$id.zip"
   # --fail so an HTML error page is never hashed as if it were a model.
-  # Timeouts matter here: without them a stalled host hangs the job until the
-  # CI time limit instead of reporting a failure anyone can act on.
+  #
+  # Timeouts matter more than they look. Without them a stalled host hangs the
+  # job until the CI time limit rather than reporting something actionable -
+  # which is exactly what happened on the first two runs of this job, where
+  # the model host went unresponsive and the run sat there for the better part
+  # of an hour. Ten minutes is generous for a ~40 MB file; a model that cannot
+  # be fetched faster than that is not one a phone user could install either.
   if ! curl --fail --location --silent --show-error \
-            --connect-timeout 30 --max-time 1800 --retry 2 --retry-delay 5 \
+            --connect-timeout 20 --max-time 600 --retry 1 --retry-delay 5 \
             --output "$file" "$url"; then
     printf '  FAIL    %-34s download failed: %s\n' "$id" "$url"
     failures=$((failures + 1))
