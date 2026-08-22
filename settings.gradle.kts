@@ -14,6 +14,7 @@ pluginManagement {
     // SDK (and without access to Google's Maven) can still build and test the
     // JVM modules.
     plugins {
+        id("org.jetbrains.kotlin.jvm") version "2.0.21" apply false
         id("com.android.application") version "8.5.2" apply false
         id("org.jetbrains.kotlin.android") version "2.0.21" apply false
         id("org.jetbrains.kotlin.plugin.compose") version "2.0.21" apply false
@@ -55,9 +56,11 @@ include(":model-manager")
 // test suite. Set ANDROID_HOME / ANDROID_SDK_ROOT, or write a local.properties
 // containing sdk.dir=..., to include them. See docs/BUILDING.md.
 // ---------------------------------------------------------------------------
+// Blank is treated as absent, so a CI job can opt out with ANDROID_HOME: ""
+// to prove the JVM modules still build with no Android SDK in play.
 val androidSdkPresent: Boolean =
-    System.getenv("ANDROID_HOME") != null ||
-        System.getenv("ANDROID_SDK_ROOT") != null ||
+    !System.getenv("ANDROID_HOME").isNullOrBlank() ||
+        !System.getenv("ANDROID_SDK_ROOT").isNullOrBlank() ||
         File(rootDir, "local.properties").let { it.exists() && it.readText().contains("sdk.dir") }
 
 if (androidSdkPresent) {

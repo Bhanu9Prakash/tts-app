@@ -26,6 +26,13 @@ jobs:
       # works in a sandbox with no access to Google's Maven, and it proves the
       # security-critical logic is genuinely decoupled from Android.
       - name: Run unit tests
+        env:
+          # GitHub runners ship an Android SDK, which would pull :app into the
+          # build. Blanking these proves the claim this job exists to prove:
+          # the security-critical logic compiles and its tests pass with no
+          # Android SDK and no access to Google's Maven repository.
+          ANDROID_HOME: ""
+          ANDROID_SDK_ROOT: ""
         run: ./gradlew test --no-daemon
 
       - name: Upload test reports
