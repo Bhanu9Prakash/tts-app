@@ -72,7 +72,11 @@ for i in $(seq 0 $((n - 1))); do
 
   file="$WORK/$id.zip"
   # --fail so an HTML error page is never hashed as if it were a model.
-  if ! curl --fail --location --silent --show-error --output "$file" "$url"; then
+  # Timeouts matter here: without them a stalled host hangs the job until the
+  # CI time limit instead of reporting a failure anyone can act on.
+  if ! curl --fail --location --silent --show-error \
+            --connect-timeout 30 --max-time 1800 --retry 2 --retry-delay 5 \
+            --output "$file" "$url"; then
     printf '  FAIL    %-34s download failed: %s\n' "$id" "$url"
     failures=$((failures + 1))
     continue

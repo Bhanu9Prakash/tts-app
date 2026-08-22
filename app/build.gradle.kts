@@ -52,6 +52,7 @@ android {
         // Accessibility/overlay code exists only in the enhanced flavour.
         getByName("enhanced") { java.srcDirs("src/enhanced/kotlin") }
         getByName("safe") { java.srcDirs("src/safe/kotlin") }
+        getByName("androidTest") { java.srcDirs("src/androidTest/kotlin") }
     }
 
     buildTypes {
@@ -122,7 +123,9 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.13")
+
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }
