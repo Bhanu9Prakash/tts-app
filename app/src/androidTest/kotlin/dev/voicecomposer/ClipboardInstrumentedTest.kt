@@ -13,6 +13,7 @@ import dev.voicecomposer.settings.SettingsRepository
 import dev.voicecomposer.ui.ComposerActivity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,17 +21,23 @@ import org.junit.runner.RunWith
 /**
  * Clipboard behaviour against the real system service.
  *
- * ## Why every test runs inside an ActivityScenario
+ * ## Why this needs setup that other tests do not
  *
- * From Android 10 the OS refuses clipboard *reads* to apps that do not have
- * window focus - `getPrimaryClip()` simply returns null. An instrumentation
- * test with no activity on screen therefore cannot observe what it just wrote,
- * and would fail for reasons that say nothing about our code. Launching
- * ComposerActivity gives the process focus, which is also closer to how the
- * feature is actually used.
+ * From Android 10 the OS refuses clipboard *reads* to apps that do not hold
+ * window focus: `getPrimaryClip()` simply returns null. On a headless CI
+ * emulator nothing ever truly holds focus, so a test cannot observe what it
+ * just wrote, and fails for reasons that say nothing about our code - which is
+ * exactly what happened the first time this job ran.
  *
- * That restriction is itself part of the story in docs/THREAT_MODEL.md: it is
- * why background clipboard snooping by other apps is bounded.
+ * So the test grants itself the READ_CLIPBOARD app-op. That changes only what
+ * the *observer* may see; it does not change [ClipboardWriter], which is the
+ * thing under test. An activity is also launched, which is closer to how the
+ * feature is really used.
+ *
+ * That OS restriction is itself part of the clipboard story in
+ * docs/THREAT_MODEL.md: it is why background clipboard snooping by other apps
+ * is bounded, and it is worth knowing that it is strong enough to get in the
+ * way of a test.
  */
 @RunWith(AndroidJUnit4::class)
 class ClipboardInstrumentedTest {
@@ -43,12 +50,23 @@ class ClipboardInstrumentedTest {
     private val context get() = instrumentation.targetContext
     private val clipboard get() = context.getSystemService(ClipboardManager::class.java)
 
+    @Before
+    fun allowClipboardReads() {
+        shell("appops set ${context.packageName} READ_CLIPBOARD allow")
+    }
+
+    private fun shell(command: String) {
+        instrumentation.uiAutomation.executeShellCommand(command).use { fd ->
+            java.io.FileInputStream(fd.fileDescriptor).use { it.readBytes() }
+        }
+    }
+
     private fun writer(policy: ClipboardAutoClear): ClipboardWriter {
         val settings = SettingsRepository(context).apply { clipboardAutoClear = policy }
         return ClipboardWriter(context, settings)
     }
 
-    /** Runs [block] on the main thread with the app focused. */
+    /** Runs [block] on the main thread with an activity on screen. */
     private fun focused(block: () -> Unit) {
         ActivityScenario.launch(ComposerActivity::class.java).use {
             instrumentation.waitForIdleSync()
