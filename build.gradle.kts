@@ -1,17 +1,32 @@
-// No plugins are applied at the root, and none are declared here with
-// `apply false`.
+// Nothing is applied or declared at the root, and there is deliberately no
+// buildSrc convention plugin either.
 //
-// Declaring the Kotlin plugin at the root would put it on the root build's
-// classpath while the Android Gradle Plugin - applied only by :app - lives in a
-// child classpath. kotlin-android needs to see AGP's classes, and across that
-// classloader boundary it cannot: the build fails with a NoClassDefFoundError
-// for com/android/build/gradle/api/BaseVariant.
+// The constraint driving this layout: kotlin-android must be able to see the
+// Android Gradle Plugin's classes. It can only do so if both are loaded by the
+// same classloader. Anything that puts the Kotlin plugin on a classpath *above*
+// :app - a root `plugins` block, even with `apply false`, or a buildSrc module
+// that depends on kotlin-gradle-plugin - splits them across a parent and child
+// loader, and the build dies with:
 //
-// Declaring AGP at the root instead would fix that, but would force AGP to
-// resolve from Google's Maven repository on every build - including builds that
-// only touch the pure-JVM modules, on machines that cannot reach it.
+//     NoClassDefFoundError: com/android/build/gradle/api/BaseVariant
 //
-// So: plugin versions are pinned centrally in settings.gradle.kts, the pure-JVM
-// modules share configuration through the `voicecomposer.jvm-module` convention
-// plugin in buildSrc, and :app applies AGP and kotlin-android together in its
-// own classpath scope.
+// The alternative fix, declaring AGP at the root too, would force AGP to
+// resolve from Google's Maven on every build - including builds that only touch
+// the pure-JVM modules, on machines that cannot reach that host.
+//
+// So each module declares its own plugins, in its own classpath scope, with
+// versions pinned centrally in settings.gradle.kts. The small amount of
+// repetition in the module build files is the price, and it is worth paying:
+// it is what lets `./gradlew test` run with no Android SDK present at all.
+
+subprojects {
+    // Pure Gradle API only - no Kotlin or Android types - so this is safe to
+    // apply from the root regardless of which plugins a module uses.
+    tasks.withType<Test>().configureEach {
+        useJUnitPlatform()
+        testLogging {
+            events("passed", "failed", "skipped")
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
+    }
+}
