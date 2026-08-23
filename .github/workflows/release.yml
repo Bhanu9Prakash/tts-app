@@ -58,24 +58,31 @@ jobs:
           done
 
       - name: Stage artifacts with readable names
-        id: stage
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp app/build/outputs/apk/safe/release/app-safe-release.apk         dist/voice-composer-safe.apk
-          cp app/build/outputs/apk/enhanced/release/app-enhanced-release.apk dist/voice-composer-enhanced.apk
-          cp app/build/outputs/apk/safe/debug/app-safe-debug.apk             dist/voice-composer-safe-debug.apk
-          cp app/build/outputs/apk/enhanced/debug/app-enhanced-debug.apk     dist/voice-composer-enhanced-debug.apk
+
+          # Per-ABI plus universal, for both flavours. arm64-v8a is what almost
+          # every modern phone wants; universal is the safe sideload.
+          for flavour in safe enhanced; do
+            for abi in arm64-v8a armeabi-v7a x86_64 universal; do
+              src="app/build/outputs/apk/$flavour/release/app-$flavour-$abi-release.apk"
+              [ -f "$src" ] || { echo "missing: $src" >&2; exit 1; }
+              cp "$src" "dist/voice-composer-$flavour-$abi.apk"
+            done
+          done
+
           cd dist
           sha256sum *.apk > SHA256SUMS.txt
+          ls -lh
           cat SHA256SUMS.txt
 
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           {
             echo "### Permissions"
             echo
-            for apk in voice-composer-safe.apk voice-composer-enhanced.apk; do
-              echo "**$apk**"
+            for apk in voice-composer-safe-universal.apk voice-composer-enhanced-universal.apk; do
+              echo "**${apk/-universal/}** (same for every ABI variant)"
               echo '```'
               "$BUILD_TOOLS/aapt2" dump permissions "$apk" | grep -E "^uses-permission" || echo "(none)"
               echo '```'
@@ -97,9 +104,16 @@ jobs:
             cat <<'NOTES'
           Voice Composer — a private voice drafting layer for Android.
 
-          **Install `voice-composer-safe.apk` unless you specifically want Flow Mode.**
-          It requests three permissions in total and contains no accessibility
-          service at all. See `docs/MODES.md` for the comparison.
+          **Install `voice-composer-safe-arm64-v8a.apk`** unless you specifically
+          want Flow Mode. The safe build requests three permissions in total and
+          contains no accessibility service at all — see `docs/MODES.md`.
+
+          Which file:
+
+          - `…-arm64-v8a.apk` — almost every modern phone. **Start here.**
+          - `…-armeabi-v7a.apk` — older 32-bit ARM devices.
+          - `…-x86_64.apk` — emulators.
+          - `…-universal.apk` — works anywhere, ~3× larger. Use if unsure.
 
           ### Read before installing
 

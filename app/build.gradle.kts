@@ -55,6 +55,29 @@ android {
         getByName("androidTest") { java.srcDirs("src/androidTest/kotlin") }
     }
 
+    // -----------------------------------------------------------------------
+    // Per-ABI APKs.
+    //
+    // Vosk ships a native library per architecture, and at ~10 MB each they
+    // dominate the APK: a universal build is ~42 MB, of which ~30 MB is
+    // libraries for CPUs the device does not have. Splitting gets a real phone
+    // down to roughly a third of that.
+    //
+    // The universal APK is still produced, because sideloading without knowing
+    // the target device is a real use case and a download that silently fails
+    // to install is worse than a large one.
+    // -----------------------------------------------------------------------
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            // 32-bit x86 is dropped: no current device needs it, and it is pure
+            // size. arm64-v8a covers essentially every modern phone.
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
