@@ -1,0 +1,136 @@
+name: Release
+
+# Publishes the APKs as GitHub Release assets on a version tag.
+#
+# Release assets, rather than workflow artifacts, because artifacts expire after
+# 90 days and require a GitHub login to fetch. A release asset is permanent and
+# publicly downloadable, which is what you want for something people are meant
+# to install and verify.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish APKs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run unit tests
+        run: ./gradlew test --no-daemon
+
+      - name: Assemble APKs
+        run: ./gradlew assembleSafeDebug assembleEnhancedDebug assembleSafeRelease assembleEnhancedRelease --no-daemon
+
+      # Same guarantee the build workflow enforces, re-checked here so a
+      # published binary can never carry permissions the docs say it lacks.
+      - name: Verify safe flavour excludes overlay and accessibility
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          AAPT2="$BUILD_TOOLS/aapt2"
+          for apk in $(find app/build/outputs/apk/safe -name '*.apk'); do
+            if "$AAPT2" dump permissions "$apk" | grep -q "SYSTEM_ALERT_WINDOW"; then
+              echo "FAIL: safe flavour requests SYSTEM_ALERT_WINDOW"; exit 1
+            fi
+            if "$AAPT2" dump xmltree --file AndroidManifest.xml "$apk" | grep -q "BIND_ACCESSIBILITY_SERVICE"; then
+              echo "FAIL: safe flavour declares an accessibility service"; exit 1
+            fi
+            echo "OK: $apk"
+          done
+
+      - name: Stage artifacts with readable names
+        id: stage
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp app/build/outputs/apk/safe/release/app-safe-release.apk         dist/voice-composer-safe.apk
+          cp app/build/outputs/apk/enhanced/release/app-enhanced-release.apk dist/voice-composer-enhanced.apk
+          cp app/build/outputs/apk/safe/debug/app-safe-debug.apk             dist/voice-composer-safe-debug.apk
+          cp app/build/outputs/apk/enhanced/debug/app-enhanced-debug.apk     dist/voice-composer-enhanced-debug.apk
+          cd dist
+          sha256sum *.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          {
+            echo "### Permissions"
+            echo
+            for apk in voice-composer-safe.apk voice-composer-enhanced.apk; do
+              echo "**$apk**"
+              echo '```'
+              "$BUILD_TOOLS/aapt2" dump permissions "$apk" | grep -E "^uses-permission" || echo "(none)"
+              echo '```'
+              echo
+            done
+            echo "### SHA-256"
+            echo '```'
+            cat SHA256SUMS.txt
+            echo '```'
+          } > ../release-body-tail.md
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}
+        run: |
+          set -euo pipefail
+          {
+            cat <<'NOTES'
+          Voice Composer — a private voice drafting layer for Android.
+
+          **Install `voice-composer-safe.apk` unless you specifically want Flow Mode.**
+          It requests three permissions in total and contains no accessibility
+          service at all. See `docs/MODES.md` for the comparison.
+
+          ### Read before installing
+
+          - **These APKs are signed with a debug key.** They install and run, but
+            they are not suitable for distribution. Sign a real release with your
+            own key — see `docs/BUILDING.md`.
+          - **Local speech models cannot be downloaded yet.** Every model ships
+            with an unpinned checksum and the app refuses to fetch it, by design.
+            Until checksums are pinned the app falls back to the Android platform
+            recogniser, and the pipeline banner correctly stops claiming "local".
+            See `docs/LIMITATIONS.md`.
+          - **Most of the app has never run on a real handset.** The Keystore,
+            model storage and clipboard paths are covered by emulator tests; the
+            UI, speech and Flow Mode are not. See `docs/TEST_RESULTS.md`.
+
+          ### Verify before you install
+
+          ```bash
+          sha256sum -c SHA256SUMS.txt
+          aapt2 dump permissions voice-composer-safe.apk
+          ```
+
+          NOTES
+            cat release-body-tail.md
+          } > release-body.md
+
+          gh release create "$TAG" dist/* \
+            --title "Voice Composer $TAG" \
+            --notes-file release-body.md \
+            --prerelease \
+            --target "${{ github.sha }}"
+
+          echo "Release URL:"
+          gh release view "$TAG" --json url --jq .url
